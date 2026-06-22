@@ -65,7 +65,8 @@ const CONFIG = {
   feedback: {
     scorePopupLife: 0.7,
     rippleLife: 0.45,
-    particleCount: 14
+    particleCount: 14,
+    catHappyLife: 0.5
   },
   phases: [
     { name: "爽吃期", start: 0, end: 20, weights: [37, 33, 19, 8, 4, 1], refillSmallOnly: false, threatMultiplier: 0.95, pressureSpawnChance: 0.22 },
@@ -119,6 +120,7 @@ let scorePopups = [];
 let dangerMessage = "";
 let debugMode = false;
 let bonusCrocodilesAdded = false;
+let catHappyLife = 0;
 
 const camera = {
   x: 0,
@@ -158,6 +160,7 @@ function initGame() {
   remainingTime = GAME_TIME;
   dangerMessage = "";
   bonusCrocodilesAdded = false;
+  catHappyLife = 0;
   input.active = false;
   resetKeys();
   gameState = "playing";
@@ -445,6 +448,8 @@ function moveThreatTowardPlayer(item, deltaSeconds, phase) {
 }
 
 function updateEffects(deltaSeconds) {
+  catHappyLife = Math.max(0, catHappyLife - deltaSeconds);
+
   for (const particle of particles) {
     particle.x += particle.vx * deltaSeconds;
     particle.y += particle.vy * deltaSeconds;
@@ -621,6 +626,7 @@ function createGrowthBurst() {
 }
 
 function createEatEffect(x, y, color, scoreValue) {
+  triggerCatHappy();
   ripples.push({ x, y, radius: 6, life: CONFIG.feedback.rippleLife, color });
   scorePopups.push({
     x,
@@ -642,6 +648,14 @@ function createEatEffect(x, y, color, scoreValue) {
       color
     });
   }
+}
+
+function triggerCatHappy() {
+  catHappyLife = CONFIG.feedback.catHappyLife;
+}
+
+function getCatHappyRatio() {
+  return clamp(catHappyLife / CONFIG.feedback.catHappyLife, 0, 1);
 }
 
 function getStarCount(currentScore) {
@@ -1063,10 +1077,10 @@ function drawPlayer() {
   ctx.stroke();
   ctx.restore();
 
-  drawCat(player.x, player.y, player.radius);
+  drawCat(player.x, player.y, player.radius, getCatHappyRatio());
 }
 
-function drawCat(x, y, radius) {
+function drawCat(x, y, radius, happyRatio = 0) {
   ctx.save();
   ctx.translate(x, y);
 
@@ -1109,11 +1123,31 @@ function drawCat(x, y, radius) {
   ctx.ellipse(0, radius * 0.14, radius * 0.46, radius * 0.34, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.fillStyle = "#263238";
-  ctx.beginPath();
-  ctx.arc(-radius * 0.28, -radius * 0.12, Math.max(2.5, radius * 0.08), 0, Math.PI * 2);
-  ctx.arc(radius * 0.28, -radius * 0.12, Math.max(2.5, radius * 0.08), 0, Math.PI * 2);
-  ctx.fill();
+  if (happyRatio > 0.05) {
+    ctx.strokeStyle = "#263238";
+    ctx.lineWidth = Math.max(2, radius * 0.06);
+    ctx.lineCap = "round";
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(side * radius * 0.28, -radius * 0.13, radius * 0.12, 0.18, Math.PI - 0.18);
+      ctx.stroke();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = 0.22 + happyRatio * 0.3;
+    ctx.fillStyle = "#ff8fb3";
+    ctx.beginPath();
+    ctx.ellipse(-radius * 0.43, radius * 0.08, radius * 0.16, radius * 0.08, -0.2, 0, Math.PI * 2);
+    ctx.ellipse(radius * 0.43, radius * 0.08, radius * 0.16, radius * 0.08, 0.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  } else {
+    ctx.fillStyle = "#263238";
+    ctx.beginPath();
+    ctx.arc(-radius * 0.28, -radius * 0.12, Math.max(2.5, radius * 0.08), 0, Math.PI * 2);
+    ctx.arc(radius * 0.28, -radius * 0.12, Math.max(2.5, radius * 0.08), 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.fillStyle = "#e97676";
   ctx.beginPath();
@@ -1126,8 +1160,12 @@ function drawCat(x, y, radius) {
   ctx.strokeStyle = lineColor;
   ctx.lineWidth = Math.max(1.2, radius * 0.035);
   ctx.beginPath();
-  ctx.arc(-radius * 0.08, radius * 0.18, radius * 0.12, 0.2, Math.PI * 0.95);
-  ctx.arc(radius * 0.08, radius * 0.18, radius * 0.12, Math.PI * 0.05, Math.PI * 0.8);
+  if (happyRatio > 0.05) {
+    ctx.arc(0, radius * 0.16, radius * (0.18 + happyRatio * 0.04), 0.1, Math.PI - 0.1);
+  } else {
+    ctx.arc(-radius * 0.08, radius * 0.18, radius * 0.12, 0.2, Math.PI * 0.95);
+    ctx.arc(radius * 0.08, radius * 0.18, radius * 0.12, Math.PI * 0.05, Math.PI * 0.8);
+  }
   ctx.stroke();
 
   ctx.strokeStyle = "rgba(36,79,124,0.58)";
