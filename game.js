@@ -16,9 +16,9 @@ const CONFIG = {
   game: {
     time: 60,
     winScore: 850,
-    starTargets: [850, 1100, 1400],
-    initialObjectCount: 66,
-    maxObjectCount: 88
+    starTargets: [850, 1200, 1400],
+    initialObjectCount: 78,
+    maxObjectCount: 104
   },
   player: {
     initialRadius: 22,
@@ -27,10 +27,13 @@ const CONFIG = {
     keyboardTargetDistance: 128,
     growthRate: 0.066,
     growthSlowdown: 0.36,
-    growthSlowdownRadius: 58
+    growthSlowdownRadius: 58,
+    crocodileReadyScore: 1200,
+    crocodileReadyRadius: 96
   },
   collision: {
     eatRatio: 0.74,
+    crocodileEatRatio: 0.92,
     eatAssistRatio: 0.16,
     dangerCollisionRatio: 0.65,
     warningDistance: 150
@@ -46,11 +49,14 @@ const CONFIG = {
     pressureMinDistance: 300,
     pressureMaxDistance: 620,
     objectPadding: 18,
-    overlapPadding: 8,
+    overlapPadding: 5,
     maxAttempts: 28,
-    refillLowCount: 40,
-    refillEdibleCount: 9,
-    refillBatch: 10
+    refillLowCount: 50,
+    refillEdibleCount: 13,
+    refillBatch: 14,
+    bonusCrocodiles: 5,
+    minCrocodilesAfterReady: 4,
+    crocodileRefillBatch: 2
   },
   threat: {
     chaseRange: 680,
@@ -62,9 +68,9 @@ const CONFIG = {
     particleCount: 14
   },
   phases: [
-    { name: "爽吃期", start: 0, end: 20, weights: [36, 32, 19, 8, 4, 1], refillSmallOnly: false, threatMultiplier: 0.95, pressureSpawnChance: 0.22 },
-    { name: "稳定期", start: 20, end: 45, weights: [23, 27, 24, 15, 8, 3], refillSmallOnly: false, threatMultiplier: 1.16, pressureSpawnChance: 0.34 },
-    { name: "压力期", start: 45, end: 60, weights: [12, 18, 24, 21, 16, 9], refillSmallOnly: false, threatMultiplier: 1.5, pressureSpawnChance: 0.48 }
+    { name: "爽吃期", start: 0, end: 20, weights: [37, 33, 19, 8, 4, 1], refillSmallOnly: false, threatMultiplier: 0.95, pressureSpawnChance: 0.22 },
+    { name: "稳定期", start: 20, end: 45, weights: [24, 28, 25, 15, 8, 4], refillSmallOnly: false, threatMultiplier: 1.16, pressureSpawnChance: 0.34 },
+    { name: "压力期", start: 45, end: 60, weights: [13, 19, 24, 21, 16, 11], refillSmallOnly: false, threatMultiplier: 1.5, pressureSpawnChance: 0.48 }
   ]
 };
 
@@ -90,7 +96,7 @@ const objectTypes = [
   { name: "中鱼", minRadius: 18, maxRadius: 26, score: 20, color: "#8fd8ff", accent: "#317fbd" },
   { name: "螃蟹", minRadius: 26, maxRadius: 34, score: 35, color: "#ff876b", accent: "#bf4d42" },
   { name: "大鱼", minRadius: 34, maxRadius: 46, score: 60, color: "#b99cff", accent: "#6f54c7" },
-  { name: "鳄鱼", minRadius: 66, maxRadius: 86, score: 180, color: "#65b96f", accent: "#256f42" }
+  { name: "鳄鱼", minRadius: 66, maxRadius: 86, score: 100, color: "#65b96f", accent: "#256f42" }
 ];
 
 // =========================
@@ -112,6 +118,7 @@ let bubbles = [];
 let scorePopups = [];
 let dangerMessage = "";
 let debugMode = false;
+let bonusCrocodilesAdded = false;
 
 const camera = {
   x: 0,
@@ -150,6 +157,7 @@ function initGame() {
   score = 0;
   remainingTime = GAME_TIME;
   dangerMessage = "";
+  bonusCrocodilesAdded = false;
   input.active = false;
   resetKeys();
   gameState = "playing";
@@ -185,8 +193,8 @@ function generateObjects(count, smallOnly = false) {
   return list;
 }
 
-function createObject(smallOnly = false, pendingObjects = []) {
-  const type = pickObjectType(smallOnly);
+function createObject(smallOnly = false, pendingObjects = [], forcedType = null) {
+  const type = forcedType || pickObjectType(smallOnly);
   const radius = randomBetween(type.minRadius, type.maxRadius);
   const margin = radius + CONFIG.spawn.objectPadding;
   const phase = getCurrentPhase();
@@ -482,6 +490,7 @@ function checkCollisions() {
       item.eaten = true;
       score += item.type.score;
       player.radius += getGrowthAmount(item);
+      handleScoreMilestone();
       createEatEffect(item.x, item.y, item.type.color, item.type.score);
       if (getStarCount(score) >= STAR_TARGETS.length) {
         endGame("win", getResultMessage(getStarCount(score), true));
@@ -498,7 +507,15 @@ function checkCollisions() {
 }
 
 function canEat(item) {
-  return item.radius < player.radius * EAT_RATIO;
+  if (item.type.name === "鳄鱼" && score < CONFIG.player.crocodileReadyScore) {
+    return false;
+  }
+
+  return item.radius < player.radius * getEatRatio(item);
+}
+
+function getEatRatio(item) {
+  return item.type.name === "鳄鱼" ? CONFIG.collision.crocodileEatRatio : EAT_RATIO;
 }
 
 function getEatDistance(item) {
@@ -524,6 +541,8 @@ function isDangerCollision(distance, item) {
 }
 
 function replenishObjects() {
+  replenishCrocodilesAfterReady();
+
   const edibleCount = objects.filter((item) => canEat(item)).length;
   const phase = getCurrentPhase();
 
@@ -535,6 +554,70 @@ function replenishObjects() {
       objects.push(...generateObjects(addCount, phase.refillSmallOnly));
     }
   }
+}
+
+function handleScoreMilestone() {
+  if (score < CONFIG.player.crocodileReadyScore || bonusCrocodilesAdded) {
+    return;
+  }
+
+  bonusCrocodilesAdded = true;
+  player.radius = Math.max(player.radius, CONFIG.player.crocodileReadyRadius);
+  createGrowthBurst();
+  addBonusCrocodiles();
+}
+
+function addBonusCrocodiles() {
+  const crocodileType = objectTypes.find((type) => type.name === "鳄鱼");
+  const newCrocodiles = [];
+
+  for (let i = 0; i < CONFIG.spawn.bonusCrocodiles; i += 1) {
+    newCrocodiles.push(createObject(false, newCrocodiles, crocodileType));
+  }
+
+  objects.push(...newCrocodiles);
+}
+
+function replenishCrocodilesAfterReady() {
+  if (score < CONFIG.player.crocodileReadyScore) {
+    return;
+  }
+
+  const crocodileCount = objects.filter((item) => item.type.name === "鳄鱼").length;
+  const availableSlots = MAX_OBJECT_COUNT - objects.length;
+  if (crocodileCount >= CONFIG.spawn.minCrocodilesAfterReady || availableSlots <= 0) {
+    return;
+  }
+
+  const addCount = Math.min(
+    CONFIG.spawn.crocodileRefillBatch,
+    CONFIG.spawn.minCrocodilesAfterReady - crocodileCount,
+    availableSlots
+  );
+  const crocodileType = objectTypes.find((type) => type.name === "鳄鱼");
+  const newCrocodiles = [];
+
+  for (let i = 0; i < addCount; i += 1) {
+    newCrocodiles.push(createObject(false, newCrocodiles, crocodileType));
+  }
+
+  objects.push(...newCrocodiles);
+}
+
+function createGrowthBurst() {
+  ripples.push({
+    x: player.x,
+    y: player.y,
+    radius: player.radius * 0.75,
+    life: CONFIG.feedback.rippleLife * 1.5,
+    color: "#fff176"
+  });
+  scorePopups.push({
+    x: player.x,
+    y: player.y - player.radius - 12,
+    text: "可以吃鳄鱼了！",
+    life: CONFIG.feedback.scorePopupLife * 1.4
+  });
 }
 
 function createEatEffect(x, y, color, scoreValue) {
