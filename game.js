@@ -8,6 +8,7 @@ const resultTitle = document.getElementById("resultTitle");
 const resultMessage = document.getElementById("resultMessage");
 const startButton = document.getElementById("startButton");
 const restartButton = document.getElementById("restartButton");
+const soundToggle = document.getElementById("soundToggle");
 
 // =========================
 // CONFIG
@@ -69,6 +70,12 @@ const CONFIG = {
     particleCount: 14,
     catHappyLife: 0.5
   },
+  audio: {
+    musicVolume: 0.055,
+    effectVolume: 0.13,
+    musicBeat: 0.34,
+    eatSoundDuration: 0.18
+  },
   phases: [
     { name: "爽吃期", start: 0, end: 20, weights: [37, 33, 19, 8, 4, 1], refillSmallOnly: false, threatMultiplier: 0.95, pressureSpawnChance: 0.22 },
     { name: "稳定期", start: 20, end: 45, weights: [24, 28, 25, 15, 8, 4], refillSmallOnly: false, threatMultiplier: 1.16, pressureSpawnChance: 0.34 },
@@ -122,6 +129,11 @@ let dangerMessage = "";
 let debugMode = false;
 let bonusCrocodilesAdded = false;
 let catHappyLife = 0;
+let soundEnabled = true;
+let audioContext = null;
+let musicGain = null;
+let musicTimer = null;
+let musicStep = 0;
 
 const camera = {
   x: 0,
@@ -156,6 +168,7 @@ const player = {
 };
 
 function initGame() {
+  resumeAudio();
   updateWorldSize();
   score = 0;
   remainingTime = GAME_TIME;
@@ -180,11 +193,127 @@ function initGame() {
   createBubbles();
   startScreen.classList.add("hidden");
   resultScreen.classList.add("hidden");
+  updateAudioState();
   lastFrameTime = performance.now();
 }
 
 function restartGame() {
   initGame();
+}
+
+// =========================
+// AUDIO
+// =========================
+function getAudioContext() {
+  if (!audioContext) {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      return null;
+    }
+
+    audioContext = new AudioContextClass();
+    musicGain = audioContext.createGain();
+    musicGain.gain.value = CONFIG.audio.musicVolume;
+    musicGain.connect(audioContext.destination);
+  }
+
+  return audioContext;
+}
+
+function resumeAudio() {
+  const context = getAudioContext();
+  if (!context) {
+    return;
+  }
+
+  if (context.state === "suspended") {
+    context.resume();
+  }
+}
+
+function updateAudioState() {
+  soundEnabled = soundToggle ? soundToggle.checked : true;
+
+  if (soundEnabled && gameState === "playing") {
+    startBackgroundMusic();
+  } else {
+    stopBackgroundMusic();
+  }
+}
+
+function startBackgroundMusic() {
+  const context = getAudioContext();
+  if (!context || musicTimer) {
+    return;
+  }
+
+  musicStep = 0;
+  playMusicNote();
+  musicTimer = window.setInterval(playMusicNote, CONFIG.audio.musicBeat * 1000);
+}
+
+function stopBackgroundMusic() {
+  if (!musicTimer) {
+    return;
+  }
+
+  window.clearInterval(musicTimer);
+  musicTimer = null;
+}
+
+function playMusicNote() {
+  if (!soundEnabled || gameState !== "playing") {
+    return;
+  }
+
+  const context = getAudioContext();
+  if (!context || !musicGain) {
+    return;
+  }
+
+  const melody = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46];
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const noteGain = context.createGain();
+
+  oscillator.type = "triangle";
+  oscillator.frequency.value = melody[musicStep % melody.length];
+  noteGain.gain.setValueAtTime(0.0001, now);
+  noteGain.gain.exponentialRampToValueAtTime(CONFIG.audio.musicVolume, now + 0.025);
+  noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+
+  oscillator.connect(noteGain);
+  noteGain.connect(musicGain);
+  oscillator.start(now);
+  oscillator.stop(now + 0.24);
+  musicStep += 1;
+}
+
+function playEatSound() {
+  if (!soundEnabled) {
+    return;
+  }
+
+  const context = getAudioContext();
+  if (!context) {
+    return;
+  }
+
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const effectGain = context.createGain();
+
+  oscillator.type = "sine";
+  oscillator.frequency.setValueAtTime(420, now);
+  oscillator.frequency.exponentialRampToValueAtTime(880, now + CONFIG.audio.eatSoundDuration);
+  effectGain.gain.setValueAtTime(0.0001, now);
+  effectGain.gain.exponentialRampToValueAtTime(CONFIG.audio.effectVolume, now + 0.02);
+  effectGain.gain.exponentialRampToValueAtTime(0.0001, now + CONFIG.audio.eatSoundDuration);
+
+  oscillator.connect(effectGain);
+  effectGain.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + CONFIG.audio.eatSoundDuration + 0.02);
 }
 
 // =========================
@@ -636,6 +765,7 @@ function createGrowthBurst() {
 
 function createEatEffect(x, y, color, scoreValue) {
   triggerCatHappy();
+  playEatSound();
   ripples.push({ x, y, radius: 6, life: CONFIG.feedback.rippleLife, color });
   scorePopups.push({
     x,
@@ -694,6 +824,7 @@ function endGame(nextState, customMessage = "") {
   gameState = nextState;
   input.active = false;
   resetKeys();
+  stopBackgroundMusic();
   const stars = getStarCount(score);
   resultTitle.textContent = nextState === "win" ? `${getStarText(stars)} 挑战完成` : "挑战失败";
   resultMessage.textContent = customMessage || `本局得分：${score} / ${WIN_SCORE}`;
@@ -1374,6 +1505,13 @@ canvas.addEventListener("touchcancel", () => {
 
 startButton.addEventListener("click", initGame);
 restartButton.addEventListener("click", restartGame);
+
+if (soundToggle) {
+  soundToggle.addEventListener("change", () => {
+    resumeAudio();
+    updateAudioState();
+  });
+}
 
 resizeCanvas();
 createBubbles();

@@ -93,6 +93,27 @@ body {
   margin-right: 8px;
 }
 
+.sound-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 34px;
+  margin: -4px 0 18px;
+  color: #2f6871;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sound-toggle input {
+  width: 18px;
+  height: 18px;
+  accent-color: #ff7f50;
+  cursor: pointer;
+}
+
 .primary-button {
   min-width: 168px;
   min-height: 48px;
