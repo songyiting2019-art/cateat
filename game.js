@@ -71,9 +71,9 @@ const CONFIG = {
     catHappyLife: 0.5
   },
   audio: {
-    musicVolume: 0.055,
+    musicVolume: 0.16,
     effectVolume: 0.13,
-    musicBeat: 0.34,
+    musicBeat: 0.32,
     eatSoundDuration: 0.18
   },
   phases: [
@@ -134,6 +134,7 @@ let audioContext = null;
 let musicGain = null;
 let musicTimer = null;
 let musicStep = 0;
+let audioUnlocked = false;
 
 const camera = {
   x: 0,
@@ -168,7 +169,7 @@ const player = {
 };
 
 function initGame() {
-  resumeAudio();
+  unlockAudio();
   updateWorldSize();
   score = 0;
   remainingTime = GAME_TIME;
@@ -193,7 +194,7 @@ function initGame() {
   createBubbles();
   startScreen.classList.add("hidden");
   resultScreen.classList.add("hidden");
-  updateAudioState();
+  window.setTimeout(updateAudioState, 80);
   lastFrameTime = performance.now();
 }
 
@@ -231,6 +232,29 @@ function resumeAudio() {
   }
 }
 
+function unlockAudio() {
+  const context = getAudioContext();
+  if (!context) {
+    return;
+  }
+
+  resumeAudio();
+  if (audioUnlocked) {
+    return;
+  }
+
+  const now = context.currentTime;
+  const oscillator = context.createOscillator();
+  const unlockGain = context.createGain();
+  unlockGain.gain.setValueAtTime(0.0001, now);
+  oscillator.frequency.setValueAtTime(220, now);
+  oscillator.connect(unlockGain);
+  unlockGain.connect(context.destination);
+  oscillator.start(now);
+  oscillator.stop(now + 0.035);
+  audioUnlocked = true;
+}
+
 function updateAudioState() {
   soundEnabled = soundToggle ? soundToggle.checked : true;
 
@@ -248,6 +272,9 @@ function startBackgroundMusic() {
   }
 
   musicStep = 0;
+  if (musicGain) {
+    musicGain.gain.setTargetAtTime(CONFIG.audio.musicVolume, context.currentTime, 0.04);
+  }
   playMusicNote();
   musicTimer = window.setInterval(playMusicNote, CONFIG.audio.musicBeat * 1000);
 }
@@ -272,20 +299,32 @@ function playMusicNote() {
   }
 
   const melody = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 880, 698.46];
+  const harmony = [261.63, 329.63, 392, 329.63, 293.66, 349.23, 440, 349.23];
   const now = context.currentTime;
   const oscillator = context.createOscillator();
+  const bass = context.createOscillator();
   const noteGain = context.createGain();
+  const bassGain = context.createGain();
 
   oscillator.type = "triangle";
   oscillator.frequency.value = melody[musicStep % melody.length];
+  bass.type = "sine";
+  bass.frequency.value = harmony[musicStep % harmony.length];
   noteGain.gain.setValueAtTime(0.0001, now);
-  noteGain.gain.exponentialRampToValueAtTime(CONFIG.audio.musicVolume, now + 0.025);
-  noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+  noteGain.gain.exponentialRampToValueAtTime(0.85, now + 0.025);
+  noteGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+  bassGain.gain.setValueAtTime(0.0001, now);
+  bassGain.gain.exponentialRampToValueAtTime(0.28, now + 0.035);
+  bassGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
 
   oscillator.connect(noteGain);
+  bass.connect(bassGain);
   noteGain.connect(musicGain);
+  bassGain.connect(musicGain);
   oscillator.start(now);
-  oscillator.stop(now + 0.24);
+  bass.start(now);
+  oscillator.stop(now + 0.26);
+  bass.stop(now + 0.3);
   musicStep += 1;
 }
 
@@ -1479,6 +1518,10 @@ window.addEventListener("keyup", (event) => {
 
 window.addEventListener("blur", resetKeys);
 
+window.addEventListener("pointerdown", unlockAudio, { once: true });
+window.addEventListener("touchend", unlockAudio, { once: true });
+window.addEventListener("click", unlockAudio, { once: true });
+
 canvas.addEventListener("mousemove", (event) => {
   handleInput(event.clientX, event.clientY);
 });
@@ -1508,7 +1551,7 @@ restartButton.addEventListener("click", restartGame);
 
 if (soundToggle) {
   soundToggle.addEventListener("change", () => {
-    resumeAudio();
+    unlockAudio();
     updateAudioState();
   });
 }
