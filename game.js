@@ -510,10 +510,6 @@ function checkCollisions() {
       player.radius += getGrowthAmount(item);
       handleScoreMilestone();
       createEatEffect(item.x, item.y, item.type.color, item.type.score);
-      if (getStarCount(score) >= STAR_TARGETS.length) {
-        endGame("win", getResultMessage(getStarCount(score), true));
-        return;
-      }
     } else if (!canEat(item) && isDangerCollision(distance, item)) {
       dangerMessage = `撞到了${item.type.name}，${getStarText(getStarCount(score))} 本局得分：${score} / ${STAR_TARGETS[STAR_TARGETS.length - 1]}`;
       endGame("lose", dangerMessage);
@@ -685,9 +681,8 @@ function getNextStarTarget() {
   return STAR_TARGETS.find((target) => score < target) || STAR_TARGETS[STAR_TARGETS.length - 1];
 }
 
-function getResultMessage(stars, earlyComplete = false) {
-  const prefix = earlyComplete ? "三星目标达成！" : "本局结束！";
-  return `${prefix} ${getStarText(stars)} 本局得分：${score} / ${STAR_TARGETS[STAR_TARGETS.length - 1]}`;
+function getResultMessage(stars) {
+  return `本局结束！ ${getStarText(stars)} 本局得分：${score} / ${STAR_TARGETS[STAR_TARGETS.length - 1]}`;
 }
 
 function endGameByStars() {
