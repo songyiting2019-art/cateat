@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>小猫捕鱼大作战</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <canvas id="gameCanvas" aria-label="小猫捕鱼大作战游戏画布"></canvas>
+
+    <section id="startScreen" class="overlay screen-panel">
+      <h1>小猫捕鱼大作战</h1>
+      <p>拖动小猫的捕食范围，在池塘里吃掉更小的鱼虾蟹。越吃越大，60 秒内挑战三星评价。</p>
+      <ul>
+        <li>只能吞掉明显小于自己的目标</li>
+        <li>高亮目标可以吃，小猫白圈碰到红色虚线圈会失败</li>
+        <li>850 分一星，1100 分二星，1400 分三星</li>
+        <li>电脑用鼠标、方向键或 WASD 控制，手机用手指拖动</li>
+      </ul>
+      <button id="startButton" class="primary-button" type="button">开始捕鱼</button>
+    </section>
+
+    <section id="resultScreen" class="overlay screen-panel hidden">
+      <h2 id="resultTitle">挑战完成</h2>
+      <p id="resultMessage">本局得分：0</p>
+      <button id="restartButton" class="primary-button" type="button">重新开始</button>
+    </section>
+  </main>
+
+  <script src="game.js"></script>
+</body>
+</html>
