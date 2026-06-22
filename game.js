@@ -54,6 +54,7 @@ const CONFIG = {
     refillLowCount: 50,
     refillEdibleCount: 13,
     refillBatch: 14,
+    bonusBigFish: 5,
     bonusCrocodiles: 5,
     minCrocodilesAfterReady: 4,
     crocodileRefillBatch: 2
@@ -172,6 +173,7 @@ function initGame() {
   updateCamera();
   objects = [];
   objects = generateObjects(OBJECT_COUNT);
+  addInitialBigFish();
   particles = [];
   ripples = [];
   scorePopups = [];
@@ -194,6 +196,17 @@ function generateObjects(count, smallOnly = false) {
     list.push(createObject(smallOnly, list));
   }
   return list;
+}
+
+function addInitialBigFish() {
+  const bigFishType = objectTypes.find((type) => type.name === "大鱼");
+  const newBigFish = [];
+
+  for (let i = 0; i < CONFIG.spawn.bonusBigFish; i += 1) {
+    newBigFish.push(createObject(false, newBigFish, bigFishType));
+  }
+
+  objects.push(...newBigFish);
 }
 
 function createObject(smallOnly = false, pendingObjects = [], forcedType = null) {
